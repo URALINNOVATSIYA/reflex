@@ -1,2 +1,3 @@
 # reflex
-Extension of the standard reflect package
+
+Расширение и дополнение пакета reflect
