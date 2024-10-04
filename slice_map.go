@@ -76,7 +76,7 @@ func (sm *SliceMap) sliceItemSize(slice reflect.Value) uintptr {
 	}
 
 	if slice.Elem().Len() > 0 {
-		slice.Elem().Index(0).Type().Size()
+		return slice.Elem().Index(0).Type().Size()
 	}
 
 	return 0
