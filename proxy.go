@@ -21,6 +21,10 @@ func ProxyOf(v any) Proxy {
 	return Proxy{reflect.ValueOf(v)}
 }
 
+func (p Proxy) Elem() reflect.Value {
+	return MakeExported(p.Value.Elem())
+}
+
 func (p Proxy) Field(i int) reflect.Value {
 	return MakeExported(p.Value.Field(i))
 }
