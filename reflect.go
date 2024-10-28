@@ -14,6 +14,15 @@ func Zero(t reflect.Type) reflect.Value {
 	return reflect.New(t).Elem()
 }
 
+func CopyOf(v reflect.Value) reflect.Value {
+	if !v.IsValid() {
+		return reflect.Value{}
+	}
+	copy := Zero(v.Type())
+	copy.Set(v)
+	return copy
+}
+
 func PtrTo(t reflect.Type, v reflect.Value) reflect.Value {
 	p := reflect.New(t)
 	p.Elem().Set(v)
