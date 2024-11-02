@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"unsafe"
 )
 
 // Zero returns a Value representing the assignable zero value for the specified type.
@@ -27,6 +28,10 @@ func PtrTo(t reflect.Type, v reflect.Value) reflect.Value {
 	p := reflect.New(t)
 	p.Elem().Set(v)
 	return p
+}
+
+func PtrAt(t reflect.Type, v reflect.Value) reflect.Value {
+	return reflect.NewAt(t, unsafe.Pointer(v.UnsafeAddr()))
 }
 
 func NameOf(t reflect.Type) string {
