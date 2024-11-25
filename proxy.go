@@ -2,16 +2,7 @@ package reflex
 
 import (
 	"reflect"
-	"unsafe"
 )
-
-var flagOffset uintptr
-
-func MakeExported(v reflect.Value) reflect.Value {
-	flag := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), flagOffset))
-	*flag &= ^uintptr(FlagRO)
-	return v
-}
 
 type Proxy struct {
 	reflect.Value

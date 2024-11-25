@@ -7,7 +7,59 @@ import (
 	"unsafe"
 )
 
-// Zero returns a Value representing the assignable zero value for the specified type.
+const (
+	FlagKindWidth           = 5 // there are 27 kinds
+	FlagKindMask    uintptr = 1<<FlagKindWidth - 1
+	FlagStickyRO    uintptr = 1 << 5
+	FlagEmbedRO     uintptr = 1 << 6
+	FlagIndir       uintptr = 1 << 7
+	FlagAddr        uintptr = 1 << 8
+	FlagMethod      uintptr = 1 << 9
+	FlagMethodShift         = 10
+	FlagRO          uintptr = FlagStickyRO | FlagEmbedRO
+)
+
+var flagOffset uintptr
+
+func SetFlag(v reflect.Value, flag uintptr) reflect.Value {
+	f := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), flagOffset))
+	*f |= uintptr(flag)
+	return v
+}
+
+func ResetFlag(v reflect.Value, flag uintptr) reflect.Value {
+	f := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), flagOffset))
+	*f &= ^uintptr(flag)
+	return v
+}
+
+func MakeExported(v reflect.Value) reflect.Value {
+	return ResetFlag(v, FlagRO)
+}
+
+func DirPtrOf(v reflect.Value) unsafe.Pointer {
+	rv := reflect.ValueOf(v)
+	ptr := MakeExported(rv.Field(1)).Interface().(unsafe.Pointer)
+	flag := uintptr(MakeExported(rv.Field(2)).Uint())
+	if flag&FlagIndir != 0 {
+		return *(*unsafe.Pointer)(ptr)
+	}
+	return ptr
+}
+
+func PtrOf(v reflect.Value) unsafe.Pointer {
+	rv := reflect.ValueOf(v)
+	f := MakeExported(rv.Field(1))
+	return f.Interface().(unsafe.Pointer)
+}
+
+func FlagOf(v reflect.Value) uintptr {
+	rv := reflect.ValueOf(v)
+	f := MakeExported(rv.Field(2))
+	return uintptr(f.Uint())
+}
+
+// Zero returns a reflect.Value representing the assignable zero value for the specified type.
 func Zero(t reflect.Type) reflect.Value {
 	if t == nil {
 		return reflect.Value{}

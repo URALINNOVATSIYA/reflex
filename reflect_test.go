@@ -6,7 +6,7 @@ import (
 	"unsafe"
 )
 
-type testRecPtr    *testRecPtr
+type testRecPtr *testRecPtr
 type testInterface interface{}
 
 func TestNameOf(t *testing.T) {
