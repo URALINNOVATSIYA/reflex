@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 	"unsafe"
 )
 
@@ -109,15 +110,15 @@ func NameOf(t reflect.Type) string {
 	case reflect.Map:
 		return fmt.Sprintf("map[%s]%s", NameOf(t.Key()), NameOf(t.Elem()))
 	case reflect.Struct:
-		f := ""
+		var f strings.Builder
 		for i, numFields := 0, t.NumField(); i < numFields; i++ {
 			field := t.Field(i)
 			if i > 0 {
-				f += "; "
+				f.WriteString("; ")
 			}
-			f += fmt.Sprintf("%s %s", field.Name, NameOf(t.Field(i).Type))
+			fmt.Fprintf(&f, "%s %s", field.Name, NameOf(t.Field(i).Type))
 		}
-		return fmt.Sprintf("struct { %s }", f)
+		return fmt.Sprintf("struct { %s }", f.String())
 	case reflect.Chan:
 		switch t.ChanDir() {
 		case reflect.BothDir:
