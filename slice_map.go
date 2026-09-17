@@ -1,8 +1,8 @@
 package reflex
 
 import (
-	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 type SliceRelation byte
@@ -15,162 +15,193 @@ const (
 	SliceRelationRelative
 )
 
+func (r SliceRelation) String() string {
+	switch r {
+	case SliceRelationNone:
+		return "none"
+	case SliceRelationSelf:
+		return "self"
+	case SliceRelationParent:
+		return "parent"
+	case SliceRelationChild:
+		return "child"
+	case SliceRelationRelative:
+		return "relative"
+	}
+	return "unknown"
+}
+
+type Slice struct {
+	Id        int
+	V         reflect.Value
+	ElemType  reflect.Type
+	Ptr       uintptr
+	PtrLenEnd uintptr
+	PtrCapEnd uintptr
+	Parent    *Slice
+	Childs    []*Slice
+}
+
+func NewSlice(v reflect.Value, id int) *Slice {
+	var ptr uintptr
+	switch v.Kind() {
+	case reflect.Slice:
+		ptr = uintptr(DirPtrOf(v))
+	case reflect.Array:
+		ptr = uintptr(PtrOf(v))
+	case reflect.Pointer:
+		if !v.IsNil() {
+			return NewSlice(v.Elem(), id)
+		}
+		fallthrough
+	default:
+		panic("invalid argument type")
+	}
+	elemType := v.Type().Elem()
+	elemSize := elemType.Size()
+	return &Slice{
+		Id:        id,
+		V:         v,
+		ElemType:  elemType,
+		Ptr:       ptr,
+		PtrLenEnd: ptr + elemSize*uintptr(v.Len()),
+		PtrCapEnd: ptr + elemSize*uintptr(v.Cap()),
+	}
+}
+
+func (s *Slice) Relation(other *Slice) SliceRelation {
+	if s.ElemType != other.ElemType {
+		return SliceRelationNone
+	}
+	if other.Ptr >= s.PtrCapEnd || other.PtrCapEnd <= s.Ptr {
+		return SliceRelationNone
+	}
+	if s.Ptr == other.Ptr && s.PtrCapEnd == other.PtrCapEnd && s.PtrLenEnd == other.PtrLenEnd {
+		return SliceRelationSelf
+	}
+	if s.Ptr <= other.Ptr && s.PtrCapEnd >= other.PtrCapEnd {
+		if s.PtrLenEnd >= other.PtrLenEnd {
+			return SliceRelationParent
+		}
+		if s.Ptr >= other.Ptr {
+			return SliceRelationChild
+		}
+		return SliceRelationRelative
+	}
+	if other.PtrLenEnd >= s.PtrLenEnd {
+		return SliceRelationChild
+	}
+	return SliceRelationRelative
+}
+
+func (s *Slice) SliceOf(other *Slice) (int, int, int) {
+	if s.ElemType != other.ElemType {
+		return -1, -1, -1
+	}
+	if other.Ptr >= s.PtrCapEnd || other.PtrCapEnd <= s.Ptr {
+		return -1, -1, -1
+	}
+	if s.Ptr == other.Ptr && s.PtrCapEnd == other.PtrCapEnd && s.PtrLenEnd == other.PtrLenEnd {
+		return 0, s.V.Len(), s.V.Cap()
+	}
+	if s.Ptr > other.Ptr || s.PtrCapEnd < other.PtrCapEnd || s.PtrLenEnd < other.PtrLenEnd {
+		return -1, -1, -1
+	}
+	elemSize := s.ElemType.Size()
+	i := (other.Ptr - s.Ptr) / elemSize
+	j := (other.PtrLenEnd - s.Ptr) / elemSize
+	return int(i), int(j), other.V.Cap()
+}
+
+func (s *Slice) addChild(slice *Slice) {
+	if s.ElemType != slice.ElemType {
+		panic("mismatched element types")
+	}
+	s.Childs = append(s.Childs, slice)
+	slice.Parent = s
+}
+
 type SliceMap struct {
-	slices []*sliceDetails
+	items   map[Addr]*Slice
+	parents []*Slice
+	id      int
 }
 
 func NewSliceMap() *SliceMap {
-	return &SliceMap{}
-}
-
-type sliceDetails struct {
-	slice        reflect.Value
-	len          int
-	cap          int
-	itemSize     uintptr
-	firstItemPtr uintptr
-	t            reflect.Kind
-}
-
-type BoundSlice struct {
-	Slice        reflect.Value
-	intersectLen int
-	Low          int
-	High         int
-	Max          int
-	Relation     SliceRelation
-	Type         reflect.Kind
-}
-
-func (sm *SliceMap) Add(slice reflect.Value) {
-	if slice.Type().Kind() != reflect.Slice && (slice.Type().Kind() == reflect.Pointer && slice.Elem().Type().Kind() != reflect.Array) {
-		panic(fmt.Sprintf("unexpected type of slice: %s", slice.Type().Kind().String()))
-	}
-
-	sm.slices = append(sm.slices, sm.sliceDetails(slice))
-}
-
-func (sm *SliceMap) sliceDetails(slice reflect.Value) *sliceDetails {
-	t := slice.Type().Kind()
-	if t == reflect.Pointer {
-		t = slice.Elem().Type().Kind()
-	}
-
-	return &sliceDetails{
-		slice:        slice,
-		len:          slice.Len(),
-		cap:          slice.Cap(),
-		itemSize:     sm.sliceItemSize(slice),
-		firstItemPtr: slice.Pointer(),
-		t:            t,
+	return &SliceMap{
+		items: make(map[Addr]*Slice),
 	}
 }
 
-func (sm *SliceMap) sliceItemSize(slice reflect.Value) uintptr {
-	if slice.Type().Kind() == reflect.Slice {
-		if slice.Len() > 0 {
-			return slice.Index(0).Type().Size()
-		}
-
-		return 0
-	}
-
-	if slice.Elem().Len() > 0 {
-		return slice.Elem().Index(0).Type().Size()
-	}
-
-	return 0
+func (m *SliceMap) Get(v reflect.Value) *Slice {
+	return m.items[Address(v)]
 }
 
-func (sm *SliceMap) Find(slice reflect.Value) []BoundSlice {
-	if slice.Type().Kind() != reflect.Slice {
-		panic(fmt.Sprintf("unexpected type of slice: %s", slice.Type().Kind().String()))
+func (m *SliceMap) Add(v reflect.Value, id int) {
+	if id < 0 {
+		panic("idntity must not be negative")
 	}
+	slice := NewSlice(v, id)
+	m.add(slice)
+}
 
-	var boundSlices []BoundSlice
-
-	sDetails := sm.sliceDetails(slice)
-	for _, s := range sm.slices {
-		if (sDetails.len > 0 && s.len > 0) && sDetails.itemSize != s.itemSize {
-			continue
-		}
-
-		count, l, h, m, r := sm.intersect(sDetails, s)
-		if r == SliceRelationNone {
-			continue
-		}
-
-		boundSlice := BoundSlice{
-			intersectLen: count,
-			Slice:        s.slice,
-			Low:          l,
-			High:         h,
-			Max:          m,
-			Relation:     r,
-			Type:         s.t,
-		}
-
-		for i, bSlice := range boundSlices {
-			if bSlice.intersectLen > boundSlice.intersectLen {
-				continue
+func (m *SliceMap) add(slice *Slice) {
+	addr := Address(slice.V)
+	if m.items[addr] != nil {
+		panic("replacing of a slice is not supported yet")
+	}
+	m.items[addr] = slice
+	for i, parent := range m.parents {
+		switch parent.Relation(slice) {
+		case SliceRelationParent:
+			parent.addChild(slice)
+			return
+		case SliceRelationChild:
+			m.parents[i] = slice
+			for _, child := range parent.Childs {
+				slice.addChild(child)
 			}
-
-			boundSlices[i], boundSlice = boundSlice, bSlice
-		}
-
-		boundSlices = append(boundSlices, boundSlice)
-	}
-
-	return boundSlices
-}
-
-func (sm *SliceMap) intersect(slice1 *sliceDetails, slice2 *sliceDetails) (count int, low int, high int, max int, relation SliceRelation) {
-	if slice1.firstItemPtr == slice2.firstItemPtr {
-		if slice1.len > 0 && slice2.len > 0 {
-			if slice1.len > slice2.len {
-				return slice1.len - (slice1.len - slice2.len), 0, slice2.len, slice2.cap, SliceRelationChild
-			} else if slice2.len > slice1.len {
-				return slice2.len - (slice2.len - slice1.len), 0, slice1.len, slice1.cap, SliceRelationParent
+			parent.Childs = nil
+			slice.addChild(parent)
+			return
+		case SliceRelationRelative:
+			m.id--
+			p := commonParent(parent, slice, m.id)
+			for _, child := range parent.Childs {
+				p.addChild(child)
 			}
-
-			return slice1.len, 0, slice1.len, slice1.cap, SliceRelationSelf
+			parent.Childs = nil
+			p.addChild(parent)
+			p.addChild(slice)
+			last := len(m.parents) - 1
+			m.parents[i] = m.parents[last]
+			m.parents[last] = nil
+			m.parents = m.parents[:last]
+			m.add(p)
+			return
 		}
-
-		if slice1.len == 0 && slice2.len == 0 {
-			return 0, 0, 0, slice1.cap, SliceRelationSelf
-		}
-
-		if slice1.len == 0 {
-			return 0, 0, 0, slice1.cap, SliceRelationParent
-		}
-
-		return 0, 0, 0, slice1.cap, SliceRelationChild
 	}
-
-	if slice1.firstItemPtr < slice2.firstItemPtr {
-		if slice1.firstItemPtr+slice1.itemSize*uintptr(slice1.len) <= slice2.firstItemPtr {
-			return -1, -1, -1, -1, SliceRelationNone
-		}
-
-		count = sm.intersectCount(slice1, slice2)
-		return count, 0, count, count, SliceRelationRelative
-	}
-
-	if slice2.firstItemPtr+slice2.itemSize*uintptr(slice2.len) <= slice1.firstItemPtr {
-		return -1, -1, -1, -1, SliceRelationNone
-	}
-
-	count = sm.intersectCount(slice2, slice1)
-	low = int((slice1.firstItemPtr - slice2.firstItemPtr) / slice2.itemSize)
-	return count, low, low + slice1.len, low + slice1.cap, SliceRelationParent
+	m.parents = append(m.parents, slice)
 }
 
-func (sm *SliceMap) intersectCount(slice1 *sliceDetails, slice2 *sliceDetails) int {
-	count := int((slice1.firstItemPtr + slice1.itemSize*uintptr(slice1.len) - slice2.firstItemPtr) / slice1.itemSize)
-
-	if count > slice2.len {
-		return slice2.len
+func commonParent(slice1, slice2 *Slice, id int) *Slice {
+	if slice1.Ptr > slice2.Ptr {
+		slice1, slice2 = slice2, slice1
 	}
 
-	return count
+	elemSize := slice1.ElemType.Size()
+	length := (max(slice1.PtrLenEnd, slice2.PtrLenEnd) - slice1.Ptr) / elemSize
+	capacity := (max(slice1.PtrCapEnd, slice2.PtrCapEnd) - slice1.Ptr) / elemSize
+
+	data := unsafe.Slice((*byte)(unsafe.Pointer(slice1.Ptr)), int(capacity*elemSize))
+	value := reflect.NewAt(reflect.SliceOf(slice1.ElemType), unsafe.Pointer(&data)).Elem()
+	value = value.Slice3(0, int(length), int(capacity))
+
+	/*value := reflect.New(reflect.SliceOf(slice1.ElemType))
+	header := (*reflect.SliceHeader)(unsafe.Pointer(value.Pointer()))
+	header.Data = slice1.Ptr
+	header.Len = int(length)
+	header.Cap = int(capacity)*/
+
+	return NewSlice(value, id)
 }
