@@ -31,6 +31,13 @@ func (r SliceRelation) String() string {
 	return "unknown"
 }
 
+type sliceKey struct {
+	elemType  reflect.Type
+	ptr       uintptr
+	ptrLenEnd uintptr
+	ptrCapEnd uintptr
+}
+
 type Slice struct {
 	Id        int
 	V         reflect.Value
@@ -122,19 +129,21 @@ func (s *Slice) addChild(slice *Slice) {
 }
 
 type SliceMap struct {
-	items   map[Addr]*Slice
+	items   map[sliceKey]*Slice
+	idmap   map[int]*Slice
 	parents []*Slice
 	id      int
 }
 
 func NewSliceMap() *SliceMap {
 	return &SliceMap{
-		items: make(map[Addr]*Slice),
+		items: make(map[sliceKey]*Slice),
+		idmap: make(map[int]*Slice),
 	}
 }
 
-func (m *SliceMap) Get(v reflect.Value) *Slice {
-	return m.items[Address(v)]
+func (m *SliceMap) Get(id int) *Slice {
+	return m.idmap[id]
 }
 
 func (m *SliceMap) Add(v reflect.Value, id int) {
@@ -146,11 +155,27 @@ func (m *SliceMap) Add(v reflect.Value, id int) {
 }
 
 func (m *SliceMap) add(slice *Slice) {
-	addr := Address(slice.V)
-	if m.items[addr] != nil {
-		panic("replacing of a slice is not supported yet")
+	if m.idmap[slice.Id] != nil {
+		panic("slice id must be unique")
 	}
-	m.items[addr] = slice
+	key := sliceKey{
+		elemType:  slice.ElemType,
+		ptr:       slice.Ptr,
+		ptrLenEnd: slice.PtrLenEnd,
+		ptrCapEnd: slice.PtrCapEnd,
+	}
+	if s := m.items[key]; s != nil {
+		if s.Id >= 0 {
+			panic("replacing of a slice is not supported yet")
+		}
+		delete(m.idmap, s.Id)
+		s.Id = slice.Id
+		s.V = slice.V
+		m.idmap[s.Id] = s
+		return
+	}
+	m.items[key] = slice
+	m.idmap[slice.Id] = slice
 	for i, parent := range m.parents {
 		switch parent.Relation(slice) {
 		case SliceRelationParent:
@@ -197,11 +222,12 @@ func commonParent(slice1, slice2 *Slice, id int) *Slice {
 	value := reflect.NewAt(reflect.SliceOf(slice1.ElemType), unsafe.Pointer(&data)).Elem()
 	value = value.Slice3(0, int(length), int(capacity))
 
-	/*value := reflect.New(reflect.SliceOf(slice1.ElemType))
-	header := (*reflect.SliceHeader)(unsafe.Pointer(value.Pointer()))
-	header.Data = slice1.Ptr
-	header.Len = int(length)
-	header.Cap = int(capacity)*/
+	// Deprecated implementation
+	//value := reflect.New(reflect.SliceOf(slice1.ElemType))
+	//header := (*reflect.SliceHeader)(unsafe.Pointer(value.Pointer()))
+	//header.Data = slice1.Ptr
+	//header.Len = int(length)
+	//header.Cap = int(capacity)
 
 	return NewSlice(value, id)
 }

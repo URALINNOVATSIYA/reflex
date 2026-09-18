@@ -266,3 +266,42 @@ func TestSliceOf(t *testing.T) {
 		}
 	}
 }
+
+func TestSliceMap(t *testing.T) {
+	s1 := []int{1, 2, 3, 4, 5, 6}
+	ss1 := s1[0:5]
+	s2 := []int{1, 2, 3, 4, 5, 6}
+
+	m := NewSliceMap()
+	m.Add(reflect.ValueOf(s1[4:6]), 0)
+	m.Add(reflect.ValueOf(s1[0:3]), 1)
+	m.Add(reflect.ValueOf(s2[1:3]), 2)
+	m.Add(reflect.ValueOf(ss1[1:4]), 3)
+	m.Add(reflect.ValueOf(s2), 4)
+	m.Add(reflect.ValueOf(s1), 5)
+	m.Add(reflect.ValueOf(ss1[3:5]), 6)
+	m.Add(reflect.ValueOf(s2[0:2]), 7)
+
+	res := []struct {
+		parentId int
+		childs   []int
+	}{
+		{
+			5, []int{0, 1, 3, 6},
+		},
+		{
+			4, []int{2, 7},
+		},
+	}
+	for i, p := range m.parents {
+		if p.Id != res[i].parentId {
+			t.Errorf("Parent #%d is wrong.", i+1)
+			continue
+		}
+		for j, child := range p.Childs {
+			if child.Id != res[i].childs[j] {
+				t.Errorf("Child #%d of parent #%d is wrong.", j+1, i+1)
+			}
+		}
+	}
+}
