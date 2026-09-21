@@ -31,11 +31,11 @@ func (r SliceRelation) String() string {
 	return "unknown"
 }
 
-type sliceKey struct {
-	elemType  reflect.Type
-	ptr       uintptr
-	ptrLenEnd uintptr
-	ptrCapEnd uintptr
+type SliceKey struct {
+	ElemType  reflect.Type
+	Ptr       uintptr
+	PtrLenEnd uintptr
+	PtrCapEnd uintptr
 }
 
 type Slice struct {
@@ -73,6 +73,15 @@ func NewSlice(v reflect.Value, id int) *Slice {
 		Ptr:       ptr,
 		PtrLenEnd: ptr + elemSize*uintptr(v.Len()),
 		PtrCapEnd: ptr + elemSize*uintptr(v.Cap()),
+	}
+}
+
+func (s *Slice) Key() SliceKey {
+	return SliceKey{
+		ElemType:  s.ElemType,
+		Ptr:       s.Ptr,
+		PtrLenEnd: s.PtrLenEnd,
+		PtrCapEnd: s.PtrCapEnd,
 	}
 }
 
@@ -129,7 +138,7 @@ func (s *Slice) addChild(slice *Slice) {
 }
 
 type SliceMap struct {
-	items   map[sliceKey]*Slice
+	items   map[SliceKey]*Slice
 	idmap   map[int]*Slice
 	parents []*Slice
 	id      int
@@ -137,7 +146,7 @@ type SliceMap struct {
 
 func NewSliceMap() *SliceMap {
 	return &SliceMap{
-		items: make(map[sliceKey]*Slice),
+		items: make(map[SliceKey]*Slice),
 		idmap: make(map[int]*Slice),
 	}
 }
@@ -158,12 +167,7 @@ func (m *SliceMap) add(slice *Slice) {
 	if m.idmap[slice.Id] != nil {
 		panic("slice id must be unique")
 	}
-	key := sliceKey{
-		elemType:  slice.ElemType,
-		ptr:       slice.Ptr,
-		ptrLenEnd: slice.PtrLenEnd,
-		ptrCapEnd: slice.PtrCapEnd,
-	}
+	key := slice.Key()
 	if s := m.items[key]; s != nil {
 		if s.Id >= 0 {
 			panic("replacing of a slice is not supported yet")
