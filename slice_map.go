@@ -151,32 +151,43 @@ func NewSliceMap() *SliceMap {
 	}
 }
 
+func (m *SliceMap) Clear() {
+	m.id = 0
+	m.parents = nil
+	clear(m.items)
+	clear(m.idmap)
+}
+
 func (m *SliceMap) Get(id int) *Slice {
 	return m.idmap[id]
 }
 
-func (m *SliceMap) Add(v reflect.Value, id int) {
+func (m *SliceMap) Has(v reflect.Value) bool {
+	return m.items[NewSlice(v, 0).Key()] != nil
+}
+
+func (m *SliceMap) Add(v reflect.Value, id int) bool {
 	if id < 0 {
 		panic("idntity must not be negative")
 	}
 	slice := NewSlice(v, id)
-	m.add(slice)
+	return m.add(slice)
 }
 
-func (m *SliceMap) add(slice *Slice) {
+func (m *SliceMap) add(slice *Slice) bool {
 	if m.idmap[slice.Id] != nil {
 		panic("slice id must be unique")
 	}
 	key := slice.Key()
 	if s := m.items[key]; s != nil {
 		if s.Id >= 0 {
-			panic("replacing of a slice is not supported yet")
+			return false
 		}
 		delete(m.idmap, s.Id)
 		s.Id = slice.Id
 		s.V = slice.V
 		m.idmap[s.Id] = s
-		return
+		return true
 	}
 	m.items[key] = slice
 	m.idmap[slice.Id] = slice
@@ -184,7 +195,7 @@ func (m *SliceMap) add(slice *Slice) {
 		switch parent.Relation(slice) {
 		case SliceRelationParent:
 			parent.addChild(slice)
-			return
+			return true
 		case SliceRelationChild:
 			m.parents[i] = slice
 			for _, child := range parent.Childs {
@@ -192,7 +203,7 @@ func (m *SliceMap) add(slice *Slice) {
 			}
 			parent.Childs = nil
 			slice.addChild(parent)
-			return
+			return true
 		case SliceRelationRelative:
 			m.id--
 			p := commonParent(parent, slice, m.id)
@@ -206,11 +217,11 @@ func (m *SliceMap) add(slice *Slice) {
 			m.parents[i] = m.parents[last]
 			m.parents[last] = nil
 			m.parents = m.parents[:last]
-			m.add(p)
-			return
+			return m.add(p)
 		}
 	}
 	m.parents = append(m.parents, slice)
+	return true
 }
 
 func commonParent(slice1, slice2 *Slice, id int) *Slice {
