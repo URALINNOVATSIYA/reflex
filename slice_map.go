@@ -85,6 +85,14 @@ func (s *Slice) Key() SliceKey {
 	}
 }
 
+func (s *Slice) Len() int {
+	return int(s.PtrLenEnd - s.Ptr) / int(s.ElemType.Size())
+}
+
+func (s *Slice) Cap() int {
+	return int(s.PtrCapEnd - s.Ptr) / int(s.ElemType.Size())
+}
+
 func (s *Slice) Relation(other *Slice) SliceRelation {
 	if s.ElemType != other.ElemType {
 		return SliceRelationNone
@@ -118,7 +126,7 @@ func (s *Slice) SliceOf(other *Slice) (int, int, int) {
 		return -1, -1, -1
 	}
 	if s.Ptr == other.Ptr && s.PtrCapEnd == other.PtrCapEnd && s.PtrLenEnd == other.PtrLenEnd {
-		return 0, s.V.Len(), s.V.Cap()
+		return 0, s.Len(), s.Cap()
 	}
 	if s.Ptr > other.Ptr || s.PtrCapEnd < other.PtrCapEnd || s.PtrLenEnd < other.PtrLenEnd {
 		return -1, -1, -1
@@ -126,7 +134,7 @@ func (s *Slice) SliceOf(other *Slice) (int, int, int) {
 	elemSize := s.ElemType.Size()
 	i := (other.Ptr - s.Ptr) / elemSize
 	j := (other.PtrLenEnd - s.Ptr) / elemSize
-	return int(i), int(j), other.V.Cap()
+	return int(i), int(j), other.Cap()
 }
 
 func (s *Slice) addChild(slice *Slice) {
