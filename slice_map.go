@@ -86,11 +86,11 @@ func (s *Slice) Key() SliceKey {
 }
 
 func (s *Slice) Len() int {
-	return int(s.PtrLenEnd - s.Ptr) / int(s.ElemType.Size())
+	return int(s.PtrLenEnd-s.Ptr) / int(s.ElemType.Size())
 }
 
 func (s *Slice) Cap() int {
-	return int(s.PtrCapEnd - s.Ptr) / int(s.ElemType.Size())
+	return int(s.PtrCapEnd-s.Ptr) / int(s.ElemType.Size())
 }
 
 func (s *Slice) Relation(other *Slice) SliceRelation {
@@ -178,7 +178,7 @@ func (m *SliceMap) Has(v reflect.Value) bool {
 	return m.GetByValue(v) != nil
 }
 
-func (m *SliceMap) Add(v reflect.Value, id int) bool {
+func (m *SliceMap) Add(v reflect.Value, id int) (*Slice, bool) {
 	if id < 0 {
 		panic("idntity must not be negative")
 	}
@@ -186,20 +186,20 @@ func (m *SliceMap) Add(v reflect.Value, id int) bool {
 	return m.add(slice)
 }
 
-func (m *SliceMap) add(slice *Slice) bool {
+func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 	if m.idmap[slice.Id] != nil {
 		panic("slice id must be unique")
 	}
 	key := slice.Key()
 	if s := m.items[key]; s != nil {
 		if s.Id >= 0 {
-			return false
+			return s, false
 		}
 		delete(m.idmap, s.Id)
 		s.Id = slice.Id
 		s.V = slice.V
 		m.idmap[s.Id] = s
-		return true
+		return s, true
 	}
 	m.items[key] = slice
 	m.idmap[slice.Id] = slice
@@ -207,7 +207,7 @@ func (m *SliceMap) add(slice *Slice) bool {
 		switch parent.Relation(slice) {
 		case SliceRelationParent:
 			parent.addChild(slice)
-			return true
+			return slice, true
 		case SliceRelationChild:
 			m.parents[i] = slice
 			for _, child := range parent.Childs {
@@ -215,7 +215,7 @@ func (m *SliceMap) add(slice *Slice) bool {
 			}
 			parent.Childs = nil
 			slice.addChild(parent)
-			return true
+			return slice, true
 		case SliceRelationRelative:
 			m.id--
 			p := commonParent(parent, slice, m.id)
@@ -233,7 +233,7 @@ func (m *SliceMap) add(slice *Slice) bool {
 		}
 	}
 	m.parents = append(m.parents, slice)
-	return true
+	return slice, true
 }
 
 func commonParent(slice1, slice2 *Slice, id int) *Slice {
