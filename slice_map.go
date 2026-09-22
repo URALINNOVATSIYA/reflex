@@ -162,8 +162,12 @@ func (m *SliceMap) Get(id int) *Slice {
 	return m.idmap[id]
 }
 
+func (m *SliceMap) GetByValue(v reflect.Value) *Slice {
+	return m.items[NewSlice(v, 0).Key()]
+}
+
 func (m *SliceMap) Has(v reflect.Value) bool {
-	return m.items[NewSlice(v, 0).Key()] != nil
+	return m.GetByValue(v) != nil
 }
 
 func (m *SliceMap) Add(v reflect.Value, id int) bool {
