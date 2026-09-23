@@ -166,6 +166,10 @@ func (m *SliceMap) Clear() {
 	clear(m.idmap)
 }
 
+func (m *SliceMap) Parents() []*Slice {
+	return m.parents
+}
+
 func (m *SliceMap) Get(id int) *Slice {
 	return m.idmap[id]
 }
