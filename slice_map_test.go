@@ -237,7 +237,7 @@ func TestSliceOf(t *testing.T) {
 		{
 			s,
 			s[3:5:5],
-			3, 5, 2,
+			3, 5, 5,
 		},
 		// #2
 		{
@@ -249,7 +249,7 @@ func TestSliceOf(t *testing.T) {
 		{
 			s[2:5:5],
 			s[3:4:4],
-			1, 2, 1,
+			1, 2, 2,
 		},
 	}
 	for n, item := range items {

@@ -132,9 +132,10 @@ func (s *Slice) SliceOf(other *Slice) (int, int, int) {
 		return -1, -1, -1
 	}
 	elemSize := s.ElemType.Size()
-	i := (other.Ptr - s.Ptr) / elemSize
-	j := (other.PtrLenEnd - s.Ptr) / elemSize
-	return int(i), int(j), other.Cap()
+	i := int((other.Ptr - s.Ptr) / elemSize)
+	j := int((other.PtrLenEnd - s.Ptr) / elemSize)
+	k := max(other.Cap(), j)
+	return i, j, k
 }
 
 func (s *Slice) addChild(slice *Slice) {
