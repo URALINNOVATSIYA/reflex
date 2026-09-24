@@ -272,7 +272,7 @@ func TestSliceMap(t *testing.T) {
 	ss1 := s1[0:5]
 	s2 := []int{1, 2, 3, 4, 5, 6}
 
-	m := NewSliceMap()
+	m := NewSliceMap(-1)
 	m.Add(reflect.ValueOf(s1[4:6]), 0)
 	m.Add(reflect.ValueOf(s1[0:3]), 1)
 	m.Add(reflect.ValueOf(s2[1:3]), 2)

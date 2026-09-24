@@ -76,6 +76,10 @@ func NewSlice(v reflect.Value, id int) *Slice {
 	}
 }
 
+func (s *Slice) IsVirtual() bool {
+	return s.Id < 0
+}
+
 func (s *Slice) Key() SliceKey {
 	return SliceKey{
 		ElemType:  s.ElemType,
@@ -150,18 +154,21 @@ type SliceMap struct {
 	items   map[SliceKey]*Slice
 	idmap   map[int]*Slice
 	parents []*Slice
+	initId  int
 	id      int
 }
 
-func NewSliceMap() *SliceMap {
+func NewSliceMap(initialVirtualId int) *SliceMap {
 	return &SliceMap{
-		items: make(map[SliceKey]*Slice),
-		idmap: make(map[int]*Slice),
+		items:  make(map[SliceKey]*Slice),
+		idmap:  make(map[int]*Slice),
+		initId: initialVirtualId,
+		id:     initialVirtualId,
 	}
 }
 
 func (m *SliceMap) Clear() {
-	m.id = 0
+	m.id = m.initId
 	m.parents = nil
 	clear(m.items)
 	clear(m.idmap)
@@ -222,13 +229,15 @@ func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 			slice.addChild(parent)
 			return slice, true
 		case SliceRelationRelative:
-			m.id--
 			p := commonParent(parent, slice, m.id)
+			m.id--
 			for _, child := range parent.Childs {
 				p.addChild(child)
 			}
-			parent.Childs = nil
-			p.addChild(parent)
+			if !parent.IsVirtual() {
+				parent.Childs = nil
+				p.addChild(parent)
+			}
 			p.addChild(slice)
 			last := len(m.parents) - 1
 			m.parents[i] = m.parents[last]
