@@ -80,8 +80,8 @@ func (s *Slice) IsVirtual() bool {
 	return s.Id < 0
 }
 
-func (s *Slice) Addr() unsafe.Pointer {
-	return PtrOf(s.V)
+func (s *Slice) Addr() Addr {
+	return Address(s.V)
 }
 
 func (s *Slice) Key() SliceKey {
@@ -155,7 +155,7 @@ func (s *Slice) addChild(slice *Slice) {
 }
 
 type SliceMap struct {
-	items   map[unsafe.Pointer]*Slice
+	items   map[Addr]*Slice
 	idmap   map[int]*Slice
 	parents []*Slice
 	initId  int
@@ -164,7 +164,7 @@ type SliceMap struct {
 
 func NewSliceMap(initialVirtualId int) *SliceMap {
 	return &SliceMap{
-		items:  make(map[unsafe.Pointer]*Slice),
+		items:  make(map[Addr]*Slice),
 		idmap:  make(map[int]*Slice),
 		initId: initialVirtualId,
 		id:     initialVirtualId,
@@ -187,7 +187,7 @@ func (m *SliceMap) Get(id int) *Slice {
 }
 
 func (m *SliceMap) GetByValue(v reflect.Value) *Slice {
-	return m.items[PtrOf(v)]
+	return m.items[Address(v)]
 }
 
 func (m *SliceMap) Has(v reflect.Value) bool {
