@@ -80,6 +80,10 @@ func (s *Slice) IsVirtual() bool {
 	return s.Id < 0
 }
 
+func (s *Slice) Addr() unsafe.Pointer {
+	return PtrOf(s.V)
+}
+
 func (s *Slice) Key() SliceKey {
 	return SliceKey{
 		ElemType:  s.ElemType,
@@ -151,7 +155,7 @@ func (s *Slice) addChild(slice *Slice) {
 }
 
 type SliceMap struct {
-	items   map[SliceKey]*Slice
+	items   map[unsafe.Pointer]*Slice
 	idmap   map[int]*Slice
 	parents []*Slice
 	initId  int
@@ -160,7 +164,7 @@ type SliceMap struct {
 
 func NewSliceMap(initialVirtualId int) *SliceMap {
 	return &SliceMap{
-		items:  make(map[SliceKey]*Slice),
+		items:  make(map[unsafe.Pointer]*Slice),
 		idmap:  make(map[int]*Slice),
 		initId: initialVirtualId,
 		id:     initialVirtualId,
@@ -183,7 +187,7 @@ func (m *SliceMap) Get(id int) *Slice {
 }
 
 func (m *SliceMap) GetByValue(v reflect.Value) *Slice {
-	return m.items[NewSlice(v, 0).Key()]
+	return m.items[PtrOf(v)]
 }
 
 func (m *SliceMap) Has(v reflect.Value) bool {
@@ -195,31 +199,33 @@ func (m *SliceMap) Add(v reflect.Value, id int) (*Slice, bool) {
 		panic("idntity must not be negative")
 	}
 	slice := NewSlice(v, id)
-	return m.add(slice)
-}
-
-func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 	if m.idmap[slice.Id] != nil {
 		panic("slice id must be unique")
 	}
-	key := slice.Key()
-	if s := m.items[key]; s != nil {
-		if s.Id >= 0 {
-			return s, false
-		}
-		delete(m.idmap, s.Id)
-		s.Id = slice.Id
-		s.V = slice.V
-		m.idmap[s.Id] = s
-		return s, true
+	if s := m.items[slice.Addr()]; s != nil {
+		return s, false
 	}
-	m.items[key] = slice
-	m.idmap[slice.Id] = slice
+	m.add(slice)
+	return slice, true
+}
+
+func (m *SliceMap) add(slice *Slice) {
 	for i, parent := range m.parents {
 		switch parent.Relation(slice) {
+		case SliceRelationSelf:
+			if parent.IsVirtual() {
+				delete(m.idmap, parent.Id)
+				delete(m.items, parent.Addr())
+				parent.Id = slice.Id
+				parent.V = slice.V
+				m.registerSlice(parent)
+				return
+			}
+			fallthrough
 		case SliceRelationParent:
 			parent.addChild(slice)
-			return slice, true
+			m.registerSlice(slice)
+			return
 		case SliceRelationChild:
 			m.parents[i] = slice
 			for _, child := range parent.Childs {
@@ -227,8 +233,10 @@ func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 			}
 			parent.Childs = nil
 			slice.addChild(parent)
-			return slice, true
+			m.registerSlice(slice)
+			return
 		case SliceRelationRelative:
+			m.registerSlice(slice)
 			p := commonParent(parent, slice, m.id)
 			m.id--
 			for _, child := range parent.Childs {
@@ -243,11 +251,17 @@ func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 			m.parents[i] = m.parents[last]
 			m.parents[last] = nil
 			m.parents = m.parents[:last]
-			return m.add(p)
+			m.add(p)
+			return
 		}
 	}
 	m.parents = append(m.parents, slice)
-	return slice, true
+	m.registerSlice(slice)
+}
+
+func (m *SliceMap) registerSlice(slice *Slice) {
+	m.items[slice.Addr()] = slice
+	m.idmap[slice.Id] = slice
 }
 
 func commonParent(slice1, slice2 *Slice, id int) *Slice {

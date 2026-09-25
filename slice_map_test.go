@@ -281,13 +281,14 @@ func TestSliceMap(t *testing.T) {
 	m.Add(reflect.ValueOf(s1), 5)
 	m.Add(reflect.ValueOf(ss1[3:5]), 6)
 	m.Add(reflect.ValueOf(s2[0:2]), 7)
+	m.Add(reflect.ValueOf(s1), 8)
 
 	res := []struct {
 		parentId int
 		childs   []int
 	}{
 		{
-			5, []int{0, 1, 3, 6},
+			5, []int{0, 1, 3, 6, 8},
 		},
 		{
 			4, []int{2, 7},
