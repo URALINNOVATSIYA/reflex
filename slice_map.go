@@ -203,7 +203,9 @@ func (m *SliceMap) Add(v reflect.Value, id int) (*Slice, bool) {
 		panic("slice id must be unique")
 	}
 	if s := m.items[slice.Addr()]; s != nil {
-		return s, false
+		if !s.IsVirtual() {
+			return s, false
+		}
 	}
 	return slice, m.add(slice)
 }
