@@ -205,11 +205,10 @@ func (m *SliceMap) Add(v reflect.Value, id int) (*Slice, bool) {
 	if s := m.items[slice.Addr()]; s != nil {
 		return s, false
 	}
-	m.add(slice)
-	return slice, true
+	return slice, m.add(slice)
 }
 
-func (m *SliceMap) add(slice *Slice) {
+func (m *SliceMap) add(slice *Slice) bool {
 	for i, parent := range m.parents {
 		switch parent.Relation(slice) {
 		case SliceRelationSelf:
@@ -219,13 +218,13 @@ func (m *SliceMap) add(slice *Slice) {
 				parent.Id = slice.Id
 				parent.V = slice.V
 				m.registerSlice(parent)
-				return
+				return false
 			}
 			fallthrough
 		case SliceRelationParent:
 			parent.addChild(slice)
 			m.registerSlice(slice)
-			return
+			return true
 		case SliceRelationChild:
 			m.parents[i] = slice
 			for _, child := range parent.Childs {
@@ -234,7 +233,7 @@ func (m *SliceMap) add(slice *Slice) {
 			parent.Childs = nil
 			slice.addChild(parent)
 			m.registerSlice(slice)
-			return
+			return true
 		case SliceRelationRelative:
 			m.registerSlice(slice)
 			p := commonParent(parent, slice, m.id)
@@ -242,7 +241,10 @@ func (m *SliceMap) add(slice *Slice) {
 			for _, child := range parent.Childs {
 				p.addChild(child)
 			}
-			if !parent.IsVirtual() {
+			if parent.IsVirtual() {
+				delete(m.idmap, parent.Id)
+				delete(m.items, parent.Addr())
+			} else {
 				parent.Childs = nil
 				p.addChild(parent)
 			}
@@ -251,12 +253,12 @@ func (m *SliceMap) add(slice *Slice) {
 			m.parents[i] = m.parents[last]
 			m.parents[last] = nil
 			m.parents = m.parents[:last]
-			m.add(p)
-			return
+			return m.add(p)
 		}
 	}
 	m.parents = append(m.parents, slice)
 	m.registerSlice(slice)
+	return true
 }
 
 func (m *SliceMap) registerSlice(slice *Slice) {

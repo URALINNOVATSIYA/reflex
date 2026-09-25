@@ -271,6 +271,7 @@ func TestSliceMap(t *testing.T) {
 	s1 := []int{1, 2, 3, 4, 5, 6}
 	ss1 := s1[0:5]
 	s2 := []int{1, 2, 3, 4, 5, 6}
+	s3 := []byte{1, 2, 3, 4, 5, 6}
 
 	m := NewSliceMap(-1)
 	m.Add(reflect.ValueOf(s1[4:6]), 0)
@@ -282,6 +283,10 @@ func TestSliceMap(t *testing.T) {
 	m.Add(reflect.ValueOf(ss1[3:5]), 6)
 	m.Add(reflect.ValueOf(s2[0:2]), 7)
 	m.Add(reflect.ValueOf(s1), 8)
+	m.Add(reflect.ValueOf(s3[4:6]), 9)
+	m.Add(reflect.ValueOf(s3[1:3]), 10)
+	m.Add(reflect.ValueOf(s3[0:2]), 11)
+	m.Add(reflect.ValueOf(s3), 12)
 
 	res := []struct {
 		parentId int
@@ -292,6 +297,9 @@ func TestSliceMap(t *testing.T) {
 		},
 		{
 			4, []int{2, 7},
+		},
+		{
+			12, []int{9, 10, 11},
 		},
 	}
 	for i, p := range m.parents {
