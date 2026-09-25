@@ -287,10 +287,13 @@ func TestSliceMap(t *testing.T) {
 		childs   []int
 	}{
 		{
-			5, []int{0, 1, 3, 6},
+			-1, []int{0, 1, 3, 6},
 		},
 		{
 			4, []int{2, 7},
+		},
+		{
+			5, []int{},
 		},
 	}
 	for i, p := range m.parents {
