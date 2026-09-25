@@ -218,9 +218,11 @@ func (m *SliceMap) add(slice *Slice) bool {
 				parent.Id = slice.Id
 				parent.V = slice.V
 				m.registerSlice(parent)
-				return false
+				return true
 			}
-			fallthrough
+			parent.addChild(slice)
+			m.registerSlice(slice)
+			return false
 		case SliceRelationParent:
 			parent.addChild(slice)
 			m.registerSlice(slice)
