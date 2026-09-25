@@ -151,7 +151,7 @@ func (s *Slice) addChild(slice *Slice) {
 }
 
 type SliceMap struct {
-	items   map[unsafe.Pointer]*Slice
+	items   map[SliceKey]*Slice
 	idmap   map[int]*Slice
 	parents []*Slice
 	initId  int
@@ -160,7 +160,7 @@ type SliceMap struct {
 
 func NewSliceMap(initialVirtualId int) *SliceMap {
 	return &SliceMap{
-		items:  make(map[unsafe.Pointer]*Slice),
+		items:  make(map[SliceKey]*Slice),
 		idmap:  make(map[int]*Slice),
 		initId: initialVirtualId,
 		id:     initialVirtualId,
@@ -183,7 +183,7 @@ func (m *SliceMap) Get(id int) *Slice {
 }
 
 func (m *SliceMap) GetByValue(v reflect.Value) *Slice {
-	return m.items[PtrOf(v)]
+	return m.items[NewSlice(v, 0).Key()]
 }
 
 func (m *SliceMap) Has(v reflect.Value) bool {
@@ -202,8 +202,8 @@ func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 	if m.idmap[slice.Id] != nil {
 		panic("slice id must be unique")
 	}
-	addr := PtrOf(slice.V)
-	if s := m.items[addr]; s != nil {
+	key := slice.Key()
+	if s := m.items[key]; s != nil {
 		if s.Id >= 0 {
 			return s, false
 		}
@@ -213,7 +213,7 @@ func (m *SliceMap) add(slice *Slice) (*Slice, bool) {
 		m.idmap[s.Id] = s
 		return s, true
 	}
-	m.items[addr] = slice
+	m.items[key] = slice
 	m.idmap[slice.Id] = slice
 	for i, parent := range m.parents {
 		switch parent.Relation(slice) {
