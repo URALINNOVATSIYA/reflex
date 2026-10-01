@@ -38,7 +38,7 @@ func MakeExported(v reflect.Value) reflect.Value {
 	return ResetFlag(v, FlagRO)
 }
 
-func DirPtrOf(v reflect.Value) unsafe.Pointer {
+func DataPtrOf(v reflect.Value) unsafe.Pointer {
 	rv := reflect.ValueOf(v)
 	ptr := MakeExported(rv.Field(1)).Interface().(unsafe.Pointer)
 	flag := uintptr(MakeExported(rv.Field(2)).Uint())
@@ -91,10 +91,11 @@ func NameOf(t reflect.Type) string {
 	if t == nil {
 		return "nil"
 	}
-	if t.Name() != "" {
-		name := t.Name()
-		if t.PkgPath() != "" {
-			name = t.PkgPath() + "." + name
+	name := t.Name()
+	if name != "" {
+		path := t.PkgPath()
+		if path != "" {
+			name = path + "." + name
 		}
 		return name
 	}
@@ -116,7 +117,13 @@ func NameOf(t reflect.Type) string {
 			if i > 0 {
 				f.WriteString("; ")
 			}
-			fmt.Fprintf(&f, "%s %s", field.Name, NameOf(t.Field(i).Type))
+			f.WriteString(field.Name)
+			f.WriteByte(' ')
+			f.WriteString(NameOf(t.Field(i).Type))
+			if field.Tag != "" {
+				f.WriteByte(' ')
+				f.WriteString(string(field.Tag))
+			}
 		}
 		return fmt.Sprintf("struct { %s }", f.String())
 	case reflect.Chan:

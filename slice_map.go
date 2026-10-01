@@ -53,7 +53,7 @@ func NewSlice(v reflect.Value, id int) *Slice {
 	var ptr uintptr
 	switch v.Kind() {
 	case reflect.Slice:
-		ptr = uintptr(DirPtrOf(v))
+		ptr = uintptr(DataPtrOf(v))
 	case reflect.Array:
 		ptr = uintptr(PtrOf(v))
 	case reflect.Pointer:
@@ -91,6 +91,10 @@ func (s *Slice) Key() SliceKey {
 		PtrLenEnd: s.PtrLenEnd,
 		PtrCapEnd: s.PtrCapEnd,
 	}
+}
+
+func (s *Slice) ElemSize() uintptr {
+	return s.ElemType.Size()
 }
 
 func (s *Slice) Len() int {
