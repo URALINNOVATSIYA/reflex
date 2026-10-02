@@ -284,6 +284,12 @@ func TestCommonParent(t *testing.T) {
 		if parent.Relation(NewSlice(a2, 1)) != SliceRelationParent {
 			t.Errorf("Test #%d failed: the second slice is not child of a common parent.", i+1)
 		}
+		if parent.Relation(s1) != SliceRelationParent {
+			t.Errorf("Test #%d failed: the original first slice is not child of a common parent.", i+1)
+		}
+		if parent.Relation(s2) != SliceRelationParent {
+			t.Errorf("Test #%d failed: the original second slice is not child of a common parent.", i+1)
+		}
 	}
 }
 
@@ -356,7 +362,7 @@ func TestSliceMap(t *testing.T) {
 	m.Add(reflect.ValueOf(s3[1:3]), 10)
 	m.Add(reflect.ValueOf(s3[0:2]), 11)
 	m.Add(reflect.ValueOf(s3), 12)
-	m.Add(reflect.ValueOf(s4[3:5]), 13)
+	m.Add(reflect.ValueOf(s4[0:3]), 13)
 	m.Add(reflect.ValueOf(s4[2:5]), 14)
 	m.Add(reflect.ValueOf(s5[3:4]), 15)
 	m.Add(reflect.ValueOf(s4), 16)
