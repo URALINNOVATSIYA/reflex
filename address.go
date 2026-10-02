@@ -19,12 +19,12 @@ func Address(v reflect.Value) Addr {
 		return Addr{}
 	}
 	switch v.Kind() {
-	case reflect.Interface, reflect.Pointer, reflect.Struct, reflect.Array, reflect.Slice, reflect.String:
+	case reflect.Interface, reflect.Pointer, reflect.Struct, reflect.Array, reflect.Slice:
 		return Addr{
 			Ptr:  PtrOf(v),
 			Type: v.Type(),
 		}
-	case reflect.Chan, reflect.Func, reflect.Map:
+	case reflect.String, reflect.Chan, reflect.Func, reflect.Map:
 		return Addr{
 			Ptr:  DataPtrOf(v),
 			Type: v.Type(),

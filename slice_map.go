@@ -44,7 +44,7 @@ func SliceAddrOf(v reflect.Value) SliceAddr {
 	case reflect.String, reflect.Slice, reflect.Array:
 		return SliceAddr{
 			Addr: Address(v),
-			Len:  0, //v.Len(),
+			Len:  v.Len(),
 		}
 	case reflect.Pointer:
 		if !v.IsNil() {
