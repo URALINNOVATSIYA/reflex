@@ -51,11 +51,21 @@ type Slice struct {
 
 func NewSlice(v reflect.Value, id int) *Slice {
 	var ptr uintptr
+	var elemType reflect.Type
+	var capacity int
 	switch v.Kind() {
+	case reflect.String:
+		ptr = uintptr(DataPtrOf(v))
+		elemType = reflect.TypeFor[byte]()
+		capacity = v.Len()
 	case reflect.Slice:
 		ptr = uintptr(DataPtrOf(v))
+		elemType = v.Type().Elem()
+		capacity = v.Cap()
 	case reflect.Array:
 		ptr = uintptr(PtrOf(v))
+		elemType = v.Type().Elem()
+		capacity = v.Len()
 	case reflect.Pointer:
 		if !v.IsNil() {
 			return NewSlice(v.Elem(), id)
@@ -64,7 +74,6 @@ func NewSlice(v reflect.Value, id int) *Slice {
 	default:
 		panic("invalid argument type")
 	}
-	elemType := v.Type().Elem()
 	elemSize := elemType.Size()
 	return &Slice{
 		Id:        id,
@@ -72,7 +81,7 @@ func NewSlice(v reflect.Value, id int) *Slice {
 		ElemType:  elemType,
 		Ptr:       ptr,
 		PtrLenEnd: ptr + elemSize*uintptr(v.Len()),
-		PtrCapEnd: ptr + elemSize*uintptr(v.Cap()),
+		PtrCapEnd: ptr + elemSize*uintptr(capacity),
 	}
 }
 
@@ -109,22 +118,16 @@ func (s *Slice) Relation(other *Slice) SliceRelation {
 	if s.ElemType != other.ElemType {
 		return SliceRelationNone
 	}
+	if s.Ptr == other.Ptr && s.PtrLenEnd == other.PtrLenEnd && s.PtrCapEnd == other.PtrCapEnd {
+		return SliceRelationSelf
+	}
 	if other.Ptr >= s.PtrCapEnd || other.PtrCapEnd <= s.Ptr {
 		return SliceRelationNone
 	}
-	if s.Ptr == other.Ptr && s.PtrCapEnd == other.PtrCapEnd && s.PtrLenEnd == other.PtrLenEnd {
-		return SliceRelationSelf
+	if s.Ptr <= other.Ptr && s.PtrLenEnd >= other.PtrLenEnd && s.PtrCapEnd >= other.PtrCapEnd {
+		return SliceRelationParent
 	}
-	if s.Ptr <= other.Ptr && s.PtrCapEnd >= other.PtrCapEnd {
-		if s.PtrLenEnd >= other.PtrLenEnd {
-			return SliceRelationParent
-		}
-		if s.Ptr >= other.Ptr {
-			return SliceRelationChild
-		}
-		return SliceRelationRelative
-	}
-	if other.PtrLenEnd >= s.PtrLenEnd {
+	if s.Ptr >= other.Ptr && s.PtrLenEnd <= other.PtrLenEnd && s.PtrCapEnd <= other.PtrCapEnd {
 		return SliceRelationChild
 	}
 	return SliceRelationRelative
@@ -293,6 +296,10 @@ func commonParent(slice1, slice2 *Slice, id int) *Slice {
 	//header.Data = slice1.Ptr
 	//header.Len = int(length)
 	//header.Cap = int(capacity)
+
+	if slice1.V.Kind() == reflect.String {
+		value = reflect.ValueOf(string(value.Bytes()))
+	}
 
 	return NewSlice(value, id)
 }

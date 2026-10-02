@@ -2,12 +2,15 @@ package reflex
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
 func TestSliceRelation(t *testing.T) {
 	s := []int{1, 2, 3, 4, 5, 6}
 	a := &[6]int{1, 2, 3, 4, 5, 6}
+	s1 := strings.Clone("abcdef")
+	s2 := strings.Clone("abcdef")
 	items := []struct {
 		slice1   any
 		slice2   any
@@ -157,6 +160,54 @@ func TestSliceRelation(t *testing.T) {
 			s[0:0],
 			SliceRelationParent,
 		},
+		// #25
+		{
+			s1,
+			s2,
+			SliceRelationNone,
+		},
+		// #26
+		{
+			s1,
+			s1[0:6],
+			SliceRelationSelf,
+		},
+		// #27
+		{
+			s1,
+			s1[0:5],
+			SliceRelationParent,
+		},
+		// #28
+		{
+			s1[0:5],
+			s1,
+			SliceRelationChild,
+		},
+		// #29
+		{
+			s1,
+			s1[2:4],
+			SliceRelationParent,
+		},
+		// #30
+		{
+			s1[2:4],
+			s1,
+			SliceRelationChild,
+		},
+		// #31
+		{
+			s1[2:4],
+			s1[0:3],
+			SliceRelationRelative,
+		},
+		// #32
+		{
+			s1[0:2],
+			s1[1:4],
+			SliceRelationRelative,
+		},
 	}
 	for i, item := range items {
 		s1 := NewSlice(reflect.ValueOf(item.slice1), 1)
@@ -196,6 +247,16 @@ func TestCommonParent(t *testing.T) {
 			s[1:3], 1, 3,
 			s[4:6], 4, 6,
 		},
+		// #5
+		{
+			"abcd"[1:3], 1, 3,
+			"abcd"[0:2], 0, 2,
+		},
+		// #6
+		{
+			"1234"[0:2], 0, 2,
+			"1234"[1:4], 1, 4,
+		},
 	}
 	for i, item := range items {
 		s1 := NewSlice(reflect.ValueOf(item.slice1), 1)
@@ -210,12 +271,12 @@ func TestCommonParent(t *testing.T) {
 		a1 := parent.V.Slice(item.s1-smin, item.e1-smin)
 		v1 := a1.Interface()
 		if !reflect.DeepEqual(v1, item.slice1) {
-			t.Errorf("Test #%d failed: expected first slice #%v, got #%v.", i+1, item.slice1, v1)
+			t.Errorf("Test #%d failed: expected first slice %v, got %v.", i+1, item.slice1, v1)
 		}
 		a2 := parent.V.Slice(item.s2-smin, item.e2-smin)
 		v2 := a2.Interface()
 		if !reflect.DeepEqual(v2, item.slice2) {
-			t.Errorf("Test #%d failed: expected second slice #%v, got #%v.", i+1, item.slice2, v2)
+			t.Errorf("Test #%d failed: expected second slice %v, got %v.", i+1, item.slice2, v2)
 		}
 		if parent.Relation(NewSlice(a1, 1)) != SliceRelationParent {
 			t.Errorf("Test #%d failed: the first slice is not child of a common parent.", i+1)
@@ -251,6 +312,12 @@ func TestSliceOf(t *testing.T) {
 			s[3:4:4],
 			1, 2, 2,
 		},
+		// #4
+		{
+			"12345"[2:5],
+			"12345"[3:4],
+			1, 2, 2,
+		},
 	}
 	for n, item := range items {
 		parent := NewSlice(reflect.ValueOf(item.parent), 0)
@@ -272,6 +339,8 @@ func TestSliceMap(t *testing.T) {
 	ss1 := s1[0:5]
 	s2 := []int{1, 2, 3, 4, 5, 6}
 	s3 := []byte{1, 2, 3, 4, 5, 6}
+	s4 := strings.Clone("12345")
+	s5 := strings.Clone("12345")
 
 	m := NewSliceMap(-1)
 	m.Add(reflect.ValueOf(s1[4:6]), 0)
@@ -287,6 +356,11 @@ func TestSliceMap(t *testing.T) {
 	m.Add(reflect.ValueOf(s3[1:3]), 10)
 	m.Add(reflect.ValueOf(s3[0:2]), 11)
 	m.Add(reflect.ValueOf(s3), 12)
+	m.Add(reflect.ValueOf(s4[3:5]), 13)
+	m.Add(reflect.ValueOf(s4[2:5]), 14)
+	m.Add(reflect.ValueOf(s5[3:4]), 15)
+	m.Add(reflect.ValueOf(s4), 16)
+	m.Add(reflect.ValueOf(s5), 17)
 
 	res := []struct {
 		parentId int
@@ -300,6 +374,12 @@ func TestSliceMap(t *testing.T) {
 		},
 		{
 			12, []int{9, 10, 11},
+		},
+		{
+			16, []int{13, 14},
+		},
+		{
+			17, []int{15},
 		},
 	}
 	for i, p := range m.parents {
