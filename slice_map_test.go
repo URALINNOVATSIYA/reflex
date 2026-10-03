@@ -234,6 +234,43 @@ func TestSliceRelation(t *testing.T) {
 	}
 }
 
+func TestZeroSizedSliceRelations(t *testing.T) {
+	a := make([]struct{}, 2, 5)
+	b := make([]struct{}, 2, 6)
+	sliceA := NewSlice(reflect.ValueOf(a), 1)
+	sliceA2 := NewSlice(reflect.ValueOf(a), 2)
+	sliceB := NewSlice(reflect.ValueOf(b), 3)
+
+	if sliceA.Len() != 2 || sliceA.Cap() != 5 {
+		t.Errorf("expected zero-sized slice length/capacity 2/5, got %d/%d.", sliceA.Len(), sliceA.Cap())
+	}
+	if sliceA.Relation(sliceA2) != SliceRelationSelf {
+		t.Errorf("expected identical zero-sized slice headers to be self-related, got %s.", sliceA.Relation(sliceA2))
+	}
+	if sliceA.Relation(sliceB) != SliceRelationNone {
+		t.Errorf("expected zero-sized slices with different capacities to be unrelated, got %s.", sliceA.Relation(sliceB))
+	}
+
+	if addrA, addrB := SliceAddrOf(reflect.ValueOf(a)), SliceAddrOf(reflect.ValueOf(b)); addrA == addrB {
+		t.Errorf("expected slice addresses with different capacities to have distinct keys.")
+	}
+	if i, j, k := sliceA.SliceOf(sliceA2); i != 0 || j != 2 || k != 5 {
+		t.Errorf("expected self slice indices 0:2:5, got %d:%d:%d.", i, j, k)
+	}
+	if i, j, k := sliceA.SliceOf(sliceB); i != -1 || j != -1 || k != -1 {
+		t.Errorf("expected unrelated zero-sized slice indices -1:-1:-1, got %d:%d:%d.", i, j, k)
+	}
+
+	array := [3]struct{}{}
+	sliceArray := NewSlice(reflect.ValueOf(&array), 4)
+	if sliceArray.Len() != 3 || sliceArray.Cap() != 3 {
+		t.Errorf("expected zero-sized array length/capacity 3/3, got %d/%d.", sliceArray.Len(), sliceArray.Cap())
+	}
+	if sliceArray.Relation(sliceA) != SliceRelationNone {
+		t.Errorf("expected zero-sized array and slice to be unrelated, got %s.", sliceArray.Relation(sliceA))
+	}
+}
+
 func TestCommonParent(t *testing.T) {
 	s := []int{1, 2, 3, 4, 5, 6}
 	items := []struct {
@@ -305,6 +342,45 @@ func TestCommonParent(t *testing.T) {
 		if parent.Relation(s2) != SliceRelationParent {
 			t.Errorf("Test #%d failed: the original second slice is not child of a common parent.", i+1)
 		}
+	}
+}
+
+func TestSliceMapZeroSizedElements(t *testing.T) {
+	first := make([]struct{}, 2, 4)
+	second := make([]struct{}, 2, 4)
+	array := [3]struct{}{}
+	otherArray := [3]struct{}{}
+
+	m := NewSliceMap(-1)
+	m.Add(reflect.ValueOf(first), 0)
+	m.Add(reflect.ValueOf(second), 1)
+	m.Add(reflect.ValueOf(&array), 2)
+	m.Add(reflect.ValueOf(&otherArray), 3)
+
+	if len(m.parents) != 4 {
+		t.Fatalf("expected four independent zero-sized parents, got %d.", len(m.parents))
+	}
+	for i, want := range []struct {
+		id  int
+		len int
+		cap int
+	}{
+		{0, 2, 4},
+		{1, 2, 4},
+		{2, 3, 3},
+		{3, 3, 3},
+	} {
+		got := m.parents[i]
+		if got.Id != want.id || got.Len() != want.len || got.Cap() != want.cap {
+			t.Errorf("parent #%d: expected id/len/cap %d/%d/%d, got %d/%d/%d.",
+				i+1, want.id, want.len, want.cap, got.Id, got.Len(), got.Cap())
+		}
+		if got.Parent != nil || len(got.Childs) != 0 {
+			t.Errorf("parent #%d unexpectedly has slice relationships.", i+1)
+		}
+	}
+	if len(m.idmap) != 4 {
+		t.Errorf("expected all zero-sized slices and arrays indexed by ID, got %d entries.", len(m.idmap))
 	}
 }
 

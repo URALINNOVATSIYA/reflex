@@ -34,6 +34,7 @@ func (r SliceRelation) String() string {
 type SliceAddr struct {
 	Addr Addr
 	Len  int
+	Cap  int
 }
 
 func SliceAddrOf(v reflect.Value) SliceAddr {
@@ -45,6 +46,7 @@ func SliceAddrOf(v reflect.Value) SliceAddr {
 		return SliceAddr{
 			Addr: Address(v),
 			Len:  v.Len(),
+			Cap:  sliceCapacity(v),
 		}
 	case reflect.Pointer:
 		if !v.IsNil() {
@@ -56,11 +58,24 @@ func SliceAddrOf(v reflect.Value) SliceAddr {
 	}
 }
 
+func sliceCapacity(v reflect.Value) int {
+	switch v.Kind() {
+	case reflect.Slice:
+		return v.Cap()
+	case reflect.String, reflect.Array:
+		return v.Len()
+	default:
+		panic("invalid argument type")
+	}
+}
+
 type SliceKey struct {
 	ElemType  reflect.Type
 	Ptr       uintptr
 	PtrLenEnd uintptr
 	PtrCapEnd uintptr
+	Len       int
+	Cap       int
 }
 
 type Slice struct {
@@ -70,6 +85,8 @@ type Slice struct {
 	Ptr       uintptr
 	PtrLenEnd uintptr
 	PtrCapEnd uintptr
+	length    int
+	capacity  int
 	Parent    *Slice
 	Childs    []*Slice
 }
@@ -77,20 +94,16 @@ type Slice struct {
 func NewSlice(v reflect.Value, id int) *Slice {
 	var ptr uintptr
 	var elemType reflect.Type
-	var capacity int
 	switch v.Kind() {
 	case reflect.String:
 		ptr = uintptr(DataPtrOf(v))
 		elemType = reflect.TypeFor[byte]()
-		capacity = v.Len()
 	case reflect.Slice:
 		ptr = uintptr(DataPtrOf(v))
 		elemType = v.Type().Elem()
-		capacity = v.Cap()
 	case reflect.Array:
 		ptr = uintptr(PtrOf(v))
 		elemType = v.Type().Elem()
-		capacity = v.Len()
 	case reflect.Pointer:
 		if !v.IsNil() {
 			return NewSlice(v.Elem(), id)
@@ -100,13 +113,17 @@ func NewSlice(v reflect.Value, id int) *Slice {
 		panic("invalid argument type")
 	}
 	elemSize := elemType.Size()
+	length := v.Len()
+	capacity := sliceCapacity(v)
 	return &Slice{
 		Id:        id,
 		V:         v,
 		ElemType:  elemType,
 		Ptr:       ptr,
-		PtrLenEnd: ptr + elemSize*uintptr(v.Len()),
+		PtrLenEnd: ptr + elemSize*uintptr(length),
 		PtrCapEnd: ptr + elemSize*uintptr(capacity),
+		length:    length,
+		capacity:  capacity,
 	}
 }
 
@@ -124,6 +141,8 @@ func (s *Slice) Key() SliceKey {
 		Ptr:       s.Ptr,
 		PtrLenEnd: s.PtrLenEnd,
 		PtrCapEnd: s.PtrCapEnd,
+		Len:       s.length,
+		Cap:       s.capacity,
 	}
 }
 
@@ -132,19 +151,22 @@ func (s *Slice) ElemSize() uintptr {
 }
 
 func (s *Slice) Len() int {
-	return int(s.PtrLenEnd-s.Ptr) / int(s.ElemType.Size())
+	return s.length
 }
 
 func (s *Slice) Cap() int {
-	return int(s.PtrCapEnd-s.Ptr) / int(s.ElemType.Size())
+	return s.capacity
 }
 
 func (s *Slice) Relation(other *Slice) SliceRelation {
 	if s.ElemType != other.ElemType {
 		return SliceRelationNone
 	}
-	if s.Ptr == other.Ptr && s.PtrLenEnd == other.PtrLenEnd && s.PtrCapEnd == other.PtrCapEnd {
+	if s.Ptr == other.Ptr && s.length == other.length && s.capacity == other.capacity {
 		return SliceRelationSelf
+	}
+	if s.ElemSize() == 0 {
+		return SliceRelationNone
 	}
 	if other.Ptr >= s.PtrCapEnd || other.PtrCapEnd <= s.Ptr {
 		return SliceRelationNone
@@ -160,6 +182,12 @@ func (s *Slice) Relation(other *Slice) SliceRelation {
 
 func (s *Slice) SliceOf(other *Slice) (int, int, int) {
 	if s.ElemType != other.ElemType {
+		return -1, -1, -1
+	}
+	if s.ElemSize() == 0 {
+		if s.Relation(other) == SliceRelationSelf {
+			return 0, s.Len(), s.Cap()
+		}
 		return -1, -1, -1
 	}
 	if other.Ptr >= s.PtrCapEnd || other.PtrCapEnd <= s.Ptr {
@@ -243,6 +271,11 @@ func (m *SliceMap) Add(v reflect.Value, id int) (*Slice, bool) {
 }
 
 func (m *SliceMap) add(slice *Slice) bool {
+	if slice.ElemSize() == 0 {
+		m.parents = append(m.parents, slice)
+		m.idmap[slice.Id] = slice
+		return true
+	}
 	for i, parent := range m.parents {
 		switch parent.Relation(slice) {
 		case SliceRelationSelf:
@@ -298,7 +331,9 @@ func (m *SliceMap) add(slice *Slice) bool {
 }
 
 func (m *SliceMap) registerSlice(slice *Slice) {
-	m.items[slice.Addr()] = slice
+	if slice.ElemSize() != 0 {
+		m.items[slice.Addr()] = slice
+	}
 	m.idmap[slice.Id] = slice
 }
 
@@ -308,6 +343,9 @@ func commonParent(slice1, slice2 *Slice, id int) *Slice {
 	}
 
 	elemSize := slice1.ElemType.Size()
+	if elemSize == 0 {
+		panic("cannot construct common parent for zero-sized elements")
+	}
 	length := (max(slice1.PtrLenEnd, slice2.PtrLenEnd) - slice1.Ptr) / elemSize
 	capacity := (max(slice1.PtrCapEnd, slice2.PtrCapEnd) - slice1.Ptr) / elemSize
 
