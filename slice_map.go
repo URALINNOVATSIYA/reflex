@@ -174,7 +174,7 @@ func (s *Slice) SliceOf(other *Slice) (int, int, int) {
 	elemSize := s.ElemType.Size()
 	i := int((other.Ptr - s.Ptr) / elemSize)
 	j := int((other.PtrLenEnd - s.Ptr) / elemSize)
-	k := max(other.Cap(), j)
+	k := max(i+other.Cap(), j)
 	return i, j, k
 }
 
@@ -322,7 +322,7 @@ func commonParent(slice1, slice2 *Slice, id int) *Slice {
 	//header.Len = int(length)
 	//header.Cap = int(capacity)
 
-	if slice1.V.Kind() == reflect.String {
+	if slice1.V.Kind() == reflect.String && slice2.V.Kind() == reflect.String {
 		value = reflect.ValueOf(unsafe.String((*byte)(unsafe.Pointer(slice1.Ptr)), int(length)))
 	}
 

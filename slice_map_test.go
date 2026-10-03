@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
 )
 
 func TestSliceRelation(t *testing.T) {
@@ -11,6 +12,8 @@ func TestSliceRelation(t *testing.T) {
 	a := &[6]int{1, 2, 3, 4, 5, 6}
 	s1 := strings.Clone("abcdef")
 	s2 := strings.Clone("abcdef")
+	s3 := []byte("abcdef")
+	s4 := unsafe.String(unsafe.SliceData(s3), len(s3))
 	items := []struct {
 		slice1   any
 		slice2   any
@@ -208,6 +211,18 @@ func TestSliceRelation(t *testing.T) {
 			s1[1:4],
 			SliceRelationRelative,
 		},
+		// #33
+		{
+			s4[0:3],
+			s3[2:5],
+			SliceRelationRelative,
+		},
+		// #34
+		{
+			s4[2:5],
+			s3[0:3],
+			SliceRelationRelative,
+		},
 	}
 	for i, item := range items {
 		s1 := NewSlice(reflect.ValueOf(item.slice1), 1)
@@ -293,6 +308,66 @@ func TestCommonParent(t *testing.T) {
 	}
 }
 
+func TestCommonParentStringAndByteSlice(t *testing.T) {
+	backing := []byte("abcdef")
+	str := unsafe.String(unsafe.SliceData(backing), len(backing))
+	items := []struct {
+		slice1     any
+		s1, e1, k1 int
+		slice2     any
+		s2, e2, k2 int
+	}{
+		// #1
+		{
+			str[0:3], 0, 3, 3,
+			backing[2:5], 2, 5, 6,
+		},
+		// #2
+		{
+			backing[2:5], 2, 5, 6,
+			str[0:3], 0, 3, 3,
+		},
+	}
+	for caseIndex, item := range items {
+		s1 := NewSlice(reflect.ValueOf(item.slice1), 1)
+		s2 := NewSlice(reflect.ValueOf(item.slice2), 2)
+		if relation := s1.Relation(s2); relation != SliceRelationRelative {
+			t.Errorf("Test #%d failed: expected relative relation between string and byte slice, got %s.", caseIndex+1, relation)
+			continue
+		}
+
+		parent := commonParent(s1, s2, -1)
+		if parent.V.Kind() != reflect.Slice || parent.V.Type().Elem() != reflect.TypeFor[byte]() {
+			t.Errorf("Test #%d failed: expected a byte-slice common parent, got %s.", caseIndex+1, parent.V.Type())
+			continue
+		}
+
+		minStart := min(item.s1, item.s2)
+		for _, child := range []struct {
+			slice                any
+			start, end, capacity int
+		}{
+			{item.slice1, item.s1, item.e1, item.k1},
+			{item.slice2, item.s2, item.e2, item.k2},
+		} {
+			start, end, capacity := parent.SliceOf(NewSlice(reflect.ValueOf(child.slice), 1))
+			if start != child.start-minStart || end != child.end-minStart || capacity != child.capacity-minStart {
+				t.Errorf("Test #%d failed: expected slice indices %d:%d:%d, got %d:%d:%d.",
+					caseIndex+1, child.start-minStart, child.end-minStart, child.capacity-minStart, start, end, capacity)
+				continue
+			}
+			expected := reflect.ValueOf(child.slice)
+			if expected.Kind() == reflect.String {
+				if got := string(parent.V.Slice(start, end).Bytes()); got != expected.String() {
+					t.Errorf("Test #%d failed: common parent contains %q, expected %q.", caseIndex+1, got, expected.String())
+				}
+			} else if got := parent.V.Slice(start, end).Bytes(); !reflect.DeepEqual(got, expected.Interface()) {
+				t.Errorf("Test #%d failed: common parent contains %v, expected %v.", caseIndex+1, got, expected.Interface())
+			}
+		}
+	}
+}
+
 func TestSliceOf(t *testing.T) {
 	s := []int{1, 2, 3, 4, 5, 6}
 	items := []struct {
@@ -336,6 +411,72 @@ func TestSliceOf(t *testing.T) {
 		i, j, k := parent.SliceOf(child)
 		if i != item.i || j != item.j || k != item.k {
 			t.Errorf("Test #%d failed: expected %d, %d, %d, got %d, %d, %d.", n+1, item.i, item.j, item.k, i, j, k)
+		}
+	}
+}
+
+func TestSliceMapStringAndByteSlice(t *testing.T) {
+	backing := []byte("abcdef")
+	str := unsafe.String(unsafe.SliceData(backing), len(backing))
+	items := []struct {
+		first, second any
+	}{
+		{str[0:3], backing[2:5]},
+		{backing[2:5], str[0:3]},
+	}
+	for caseIndex, item := range items {
+		m := NewSliceMap(-1)
+		m.Add(reflect.ValueOf(item.first), 0)
+		m.Add(reflect.ValueOf(item.second), 1)
+
+		if len(m.parents) != 1 {
+			t.Errorf("Test #%d failed: expected one common parent, got %d.", caseIndex+1, len(m.parents))
+			continue
+		}
+		parent := m.parents[0]
+		if !parent.IsVirtual() || parent.V.Kind() != reflect.Slice || parent.V.Type().Elem() != reflect.TypeFor[byte]() {
+			t.Errorf("Test #%d failed: expected a virtual byte-slice parent, got id %d and type %s.", caseIndex+1, parent.Id, parent.V.Type())
+			continue
+		}
+		if len(parent.Childs) != 2 {
+			t.Errorf("Test #%d failed: expected two children, got %d.", caseIndex+1, len(parent.Childs))
+			continue
+		}
+		if parent.Childs[0].Id != 0 || parent.Childs[1].Id != 1 {
+			t.Errorf("Test #%d failed: expected children with IDs 0 and 1, got %d and %d.",
+				caseIndex+1, parent.Childs[0].Id, parent.Childs[1].Id)
+		}
+	}
+}
+
+func TestSliceMapStringAndByteArray(t *testing.T) {
+	backing := [6]byte{'a', 'b', 'c', 'd', 'e', 'f'}
+	str := unsafe.String(&backing[0], len(backing))
+	items := []struct {
+		first, second any
+		parentID      int
+		childID       int
+	}{
+		{str[1:4], &backing, 1, 0},
+		{&backing, str[1:4], 0, 1},
+	}
+	for caseIndex, item := range items {
+		m := NewSliceMap(-1)
+		m.Add(reflect.ValueOf(item.first), 0)
+		m.Add(reflect.ValueOf(item.second), 1)
+
+		if len(m.parents) != 1 {
+			t.Errorf("Test #%d failed: expected one shared parent, got %d.", caseIndex+1, len(m.parents))
+			continue
+		}
+		parent := m.parents[0]
+		if parent.Id != item.parentID || parent.V.Kind() != reflect.Array || parent.V.Type().Elem() != reflect.TypeFor[byte]() {
+			t.Errorf("Test #%d failed: expected byte-array parent with ID %d, got ID %d and type %s.",
+				caseIndex+1, item.parentID, parent.Id, parent.V.Type())
+			continue
+		}
+		if len(parent.Childs) != 1 || parent.Childs[0].Id != item.childID || parent.Childs[0].Parent != parent {
+			t.Errorf("Test #%d failed: expected string child with ID %d.", caseIndex+1, item.childID)
 		}
 	}
 }
