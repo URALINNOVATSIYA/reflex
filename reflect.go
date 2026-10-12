@@ -39,13 +39,13 @@ func MakeExported(v reflect.Value) reflect.Value {
 	return ResetFlag(v, FlagRO)
 }
 
-/*func DataPtrOf(v reflect.Value) unsafe.Pointer {
+func DataPtrOf(v reflect.Value) unsafe.Pointer {
 	ptr := PtrOf(v)
 	if FlagOf(v)&FlagIndir != 0 {
 		return *(*unsafe.Pointer)(ptr)
 	}
 	return ptr
-}*/
+}
 
 func PtrOf(v reflect.Value) unsafe.Pointer {
 	return *(*unsafe.Pointer)(unsafe.Add(unsafe.Pointer(&v), ptrOffset))
@@ -55,7 +55,7 @@ func FlagOf(v reflect.Value) uintptr {
 	return *(*uintptr)(unsafe.Add(unsafe.Pointer(&v), flagOffset))
 }
 
-func DataPtrOf(v reflect.Value) unsafe.Pointer {
+/*func DataPtrOf(v reflect.Value) unsafe.Pointer {
 	rv := reflect.ValueOf(v)
 	ptr := MakeExported(rv.Field(1)).Interface().(unsafe.Pointer)
 	flag := uintptr(MakeExported(rv.Field(2)).Uint())
@@ -65,7 +65,7 @@ func DataPtrOf(v reflect.Value) unsafe.Pointer {
 	return ptr
 }
 
-/*func PtrOf(v reflect.Value) unsafe.Pointer {
+func PtrOf(v reflect.Value) unsafe.Pointer {
 	rv := reflect.ValueOf(v)
 	f := MakeExported(rv.Field(1))
 	return f.Interface().(unsafe.Pointer)
