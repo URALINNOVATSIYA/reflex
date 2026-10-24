@@ -55,28 +55,6 @@ func FlagOf(v reflect.Value) uintptr {
 	return *(*uintptr)(unsafe.Add(unsafe.Pointer(&v), flagOffset))
 }
 
-/*func DataPtrOf(v reflect.Value) unsafe.Pointer {
-	rv := reflect.ValueOf(v)
-	ptr := MakeExported(rv.Field(1)).Interface().(unsafe.Pointer)
-	flag := uintptr(MakeExported(rv.Field(2)).Uint())
-	if flag&FlagIndir != 0 {
-		return *(*unsafe.Pointer)(ptr)
-	}
-	return ptr
-}
-
-func PtrOf(v reflect.Value) unsafe.Pointer {
-	rv := reflect.ValueOf(v)
-	f := MakeExported(rv.Field(1))
-	return f.Interface().(unsafe.Pointer)
-}
-
-func FlagOf(v reflect.Value) uintptr {
-	rv := reflect.ValueOf(v)
-	f := MakeExported(rv.Field(2))
-	return uintptr(f.Uint())
-}*/
-
 // Zero returns a reflect.Value representing the assignable zero value for the specified type.
 func Zero(t reflect.Type) reflect.Value {
 	if t == nil {
@@ -101,7 +79,11 @@ func PtrTo(t reflect.Type, v reflect.Value) reflect.Value {
 }
 
 func PtrAt(t reflect.Type, v reflect.Value) reflect.Value {
-	return reflect.NewAt(t, PtrOf(v))
+	ptr := PtrOf(v)
+	if FlagOf(v)&FlagIndir == 0 {
+		ptr = unsafe.Add(ptr, unsafe.Sizeof(uintptr(0)))
+	}
+	return reflect.NewAt(t, ptr)
 }
 
 func NameOf(t reflect.Type) string {
